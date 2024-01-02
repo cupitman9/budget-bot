@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"gopkg.in/tucnak/telebot.v2"
 	"log"
 	"telegram-budget-bot/internal/bot"
 	"telegram-budget-bot/internal/config"
 	"telegram-budget-bot/internal/logger"
+	"telegram-budget-bot/internal/storage"
 	"time"
 )
 
@@ -17,16 +19,22 @@ func main() {
 		log.Fatalf("Ошибка при загрузке конфигурации: %v", err)
 	}
 
-	b, err := telebot.NewBot(telebot.Settings{
-		Token:  cfg.BotToken,
-		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
-	})
-
+	dbInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+	storageInstance, err := storage.NewStorage(dbInfo)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Unable to connect to database: %v", err)
 	}
 
-	bot.SetupHandlers(b)
+	botSettings := telebot.Settings{
+		Token:  cfg.BotToken,
+		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
+	}
+	botAPI, err := telebot.NewBot(botSettings)
+	if err != nil {
+		logger.ErrorLogger.Fatalf("Error creating bot instance: %v", err)
+	}
 
-	b.Start()
+	bot.RegisterHandlers(botAPI, storageInstance)
+	botAPI.Start()
 }
