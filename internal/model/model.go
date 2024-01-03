@@ -8,3 +8,19 @@ type User struct {
 	Language  string
 	CreatedAt time.Time
 }
+
+type Category struct {
+	ID        int64
+	Name      string
+	ChatID    int64
+	CreatedAt time.Time
+}
+
+type Transaction struct {
+	UserChat        int64
+	CategoryID      int64
+	Amount          float64
+	Description     string
+	TransactionType string
+	CreatedAt       time.Time
+}
