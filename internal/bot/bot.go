@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"gopkg.in/tucnak/telebot.v2"
+	"log"
 	"strconv"
 	"strings"
 	"telegram-budget-bot/internal/model"
@@ -29,11 +30,36 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage) {
 		}
 	})
 	b.Handle(telebot.OnCallback, func(c *telebot.Callback) {
+		x := strings.ReplaceAll(c.Data, "\f", "")
+		prefixes := strings.Split(x, ":")
+		if len(prefixes) == 0 {
+			return
+		}
 		switch {
-		case strings.HasPrefix(c.Data[1:8], "expense"):
+		case prefixes[0] == "expense":
 			handleExpense(b, c, storageInstance)
-		case strings.HasPrefix(c.Data[1:9], "category"):
-			handleTransaction(b, c, storageInstance)
+		case prefixes[0] == "category":
+			categoryId, err := strconv.ParseInt(prefixes[1], 10, 64)
+			if err != nil {
+				log.Printf("error parse categoryId from prefixes: %s", prefixes[1])
+				b.Send(c.Sender, "Ошибка при обработке категории")
+				return
+			}
+
+			amount, err := strconv.ParseFloat(prefixes[3], 10)
+			if err != nil {
+				log.Printf("error parse amount from prefixes: %s", prefixes[3])
+				b.Send(c.Sender, "Ошибка при обработке суммы")
+				return
+			}
+
+			err = handleTransaction(c.Sender.ID, categoryId, amount, prefixes[2], storageInstance)
+			if err != nil {
+				b.Send(c.Sender, "Ошибка при создание и сохранение транзакции")
+				return
+			}
+			b.Send(c.Sender, fmt.Sprintf("Расход на сумму %s в категории %q добавлен.", prefixes[3], prefixes[2]))
+
 		default:
 			fmt.Println("DEFAULT")
 		}
@@ -100,8 +126,8 @@ func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *s
 
 func handleIncomeExpenseButtons(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
 	markup := &telebot.ReplyMarkup{}
-	btnIncome := markup.Data("Доход", "income", m.Text)
-	btnExpense := markup.Data("Расход", "expense", m.Text)
+	btnIncome := markup.Data("Доход", "income:"+m.Text)
+	btnExpense := markup.Data("Расход", "expense:"+m.Text)
 	markup.Inline(markup.Row(btnIncome, btnExpense))
 	b.Send(m.Sender, "Выберите тип транзакции:", markup)
 }
@@ -117,35 +143,24 @@ func handleExpense(b *telebot.Bot, c *telebot.Callback, storageInstance *storage
 	var btns []telebot.Btn
 
 	for _, category := range categories {
-		btn := markup.Data(category.Name, "category|"+strconv.Itoa(int(category.ID)), c.Data)
+		btn := markup.Data(category.Name, "category:"+strconv.Itoa(int(category.ID))+":"+c.Data)
 		btns = append(btns, btn)
 	}
 	markup.Inline(markup.Row(btns...))
 	b.Edit(c.Message, "Выберите категорию расхода:", markup)
 }
 
-func handleTransaction(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage) {
-	data := strings.Split(c.Data, "|")
-
-	if len(data) != 4 || data[0][1:] != "category" {
-		b.Send(c.Sender, "Неверный формат данных")
-		return
-	}
-	categoryID, _ := strconv.Atoi(data[1])
-	amount, _ := strconv.ParseFloat(data[3], 64)
-
+func handleTransaction(senderId, categoryId int64, amount float64, categoryType string, storageInstance *storage.Storage) error {
 	transaction := model.Transaction{
-		UserChat:        c.Sender.ID,
-		CategoryID:      int64(categoryID),
+		UserChat:        senderId,
+		CategoryID:      categoryId,
 		Amount:          amount,
-		TransactionType: "expense",
+		TransactionType: categoryType,
 		CreatedAt:       time.Now(),
 	}
 
 	if err := storageInstance.AddTransaction(transaction); err != nil {
-		b.Send(c.Sender, "Ошибка при добавлении транзакции.")
-		return
+		return err
 	}
-
-	b.Send(c.Sender, fmt.Sprintf("Расход на сумму %.2f в категории '%d' добавлен.", amount, categoryID))
+	return nil
 }

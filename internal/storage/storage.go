@@ -24,7 +24,7 @@ func NewStorage(dataSourceName string) (*Storage, error) {
 }
 
 func (s *Storage) AddUser(user model.User) error {
-	query := `INSERT INTO users (username, chat_id, language, created_at) VALUES ($1, $2, $3, $4)`
+	query := `INSERT INTO users (username, chat_id, language, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`
 	_, err := s.db.Exec(query, user.Username, user.ChatID, user.Language, user.CreatedAt)
 	return err
 }
