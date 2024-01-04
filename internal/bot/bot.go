@@ -24,6 +24,10 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage) {
 		handleShowCategories(b, m, storageInstance)
 	})
 
+	b.Handle("/stats", func(m *telebot.Message) {
+		handleStatsButtons(b, m, storageInstance)
+	})
+
 	b.Handle(telebot.OnText, func(m *telebot.Message) {
 		if _, err := strconv.ParseFloat(m.Text, 64); err == nil {
 			handleIncomeExpenseButtons(b, m, storageInstance)
@@ -37,6 +41,8 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage) {
 		}
 		switch {
 		case prefixes[0] == "expense":
+			handleExpense(b, c, storageInstance)
+		case prefixes[0] == "income":
 			handleExpense(b, c, storageInstance)
 		case prefixes[0] == "category":
 			categoryId, err := strconv.ParseInt(prefixes[1], 10, 64)
@@ -58,7 +64,13 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage) {
 				b.Send(c.Sender, "Ошибка при создание и сохранение транзакции")
 				return
 			}
-			b.Send(c.Sender, fmt.Sprintf("Расход на сумму %s в категории %q добавлен.", prefixes[3], prefixes[2]))
+			b.Send(c.Sender, fmt.Sprintf("Транзакция на сумму %s в категорию %q добавлена.", prefixes[3], prefixes[2]))
+		case prefixes[0] == "today":
+			var startDate, endDate time.Time
+			now := time.Now()
+			startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			endDate = startDate.Add(24 * time.Hour)
+			handleStats(b, c.Sender, storageInstance, startDate, endDate)
 
 		default:
 			fmt.Println("DEFAULT")
@@ -135,7 +147,7 @@ func handleIncomeExpenseButtons(b *telebot.Bot, m *telebot.Message, storageInsta
 func handleExpense(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage) {
 	categories, err := storageInstance.GetCategoriesByChatID(c.Sender.ID)
 	if err != nil {
-		b.Send(c.Sender, "Ошибка при получении категорий расходов.")
+		b.Send(c.Sender, "Ошибка при получении категорий.")
 		return
 	}
 
@@ -147,7 +159,7 @@ func handleExpense(b *telebot.Bot, c *telebot.Callback, storageInstance *storage
 		btns = append(btns, btn)
 	}
 	markup.Inline(markup.Row(btns...))
-	b.Edit(c.Message, "Выберите категорию расхода:", markup)
+	b.Edit(c.Message, "Выберите категорию:", markup)
 }
 
 func handleTransaction(senderId, categoryId int64, amount float64, categoryType string, storageInstance *storage.Storage) error {
@@ -163,4 +175,48 @@ func handleTransaction(senderId, categoryId int64, amount float64, categoryType 
 		return err
 	}
 	return nil
+}
+
+func handleStatsButtons(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
+	markup := &telebot.ReplyMarkup{}
+	btnToday := markup.Data("Сегодня", "today")
+	markup.Inline(markup.Row(btnToday))
+	b.Send(m.Sender, "Выберите тип транзакции:", markup)
+}
+
+func handleStats(b *telebot.Bot, sender *telebot.User, storageInstance *storage.Storage, startDate, endDate time.Time) {
+	incomeCategories, expenseCategories, err := storageInstance.GetTransactionsStatsByCategory(sender.ID, startDate, endDate)
+	if err != nil {
+		b.Send(sender, "Ошибка при получении статистики: "+err.Error())
+		return
+	}
+
+	totalIncome := sumMapValues(incomeCategories)
+	totalExpense := sumMapValues(expenseCategories)
+	netIncome := totalIncome - totalExpense
+
+	var response strings.Builder
+	response.WriteString("📊 *Статистика за период*\n\n")
+
+	response.WriteString(fmt.Sprintf("💰 *Доход*: %.1f\n", totalIncome))
+	for category, amount := range incomeCategories {
+		response.WriteString(fmt.Sprintf("  - %s: %.1f\n", category, amount))
+	}
+
+	response.WriteString(fmt.Sprintf("\n💸 *Расход*: %.1f\n", totalExpense))
+	for category, amount := range expenseCategories {
+		response.WriteString(fmt.Sprintf("  - %s: %.1f\n", category, amount))
+	}
+
+	response.WriteString(fmt.Sprintf("\n💹 *Итого*: %.1f", netIncome))
+
+	b.Send(sender, response.String(), &telebot.SendOptions{ParseMode: telebot.ModeMarkdown})
+}
+
+func sumMapValues(m map[string]float64) float64 {
+	var sum float64
+	for _, value := range m {
+		sum += value
+	}
+	return sum
 }
