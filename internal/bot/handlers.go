@@ -54,17 +54,19 @@ func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *s
 		return
 	}
 
-	var response string
 	if len(categories) == 0 {
-		response = "Категории отсутствуют."
-	} else {
-		response = "Доступные категории:\n"
-		for _, c := range categories {
-			response += fmt.Sprintf("- %s\n", c.Name)
-		}
+		b.Send(m.Sender, "Категории отсутствуют.")
+		return
 	}
 
-	b.Send(m.Sender, response)
+	markup := &telebot.ReplyMarkup{}
+	var rows []telebot.Row
+	for _, category := range categories {
+		btn := markup.Data(category.Name, "cat:"+strconv.Itoa(int(category.ID)))
+		rows = append(rows, markup.Row(btn))
+	}
+	markup.Inline(rows...)
+	b.Send(m.Sender, "Выберите категорию:", markup)
 }
 
 func handleIncomeExpenseButtons(b *telebot.Bot, m *telebot.Message) {

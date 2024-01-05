@@ -36,6 +36,12 @@ func (s *Storage) AddCategory(category model.Category) error {
 	return err
 }
 
+func (s *Storage) DeleteCategory(chatID, categoryId int64) error {
+	query := `DELETE FROM categories WHERE id = $1 AND chat_id = $2`
+	_, err := s.db.Exec(query, categoryId, chatID)
+	return err
+}
+
 func (s *Storage) GetCategoriesByChatID(chatID int64) ([]model.Category, error) {
 	query := `SELECT id, name FROM categories WHERE chat_id = $1`
 	rows, err := s.db.Query(query, chatID)

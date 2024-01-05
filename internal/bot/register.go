@@ -19,6 +19,10 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage) {
 		handleAddCategory(b, m, storageInstance)
 	})
 
+	b.Handle("/del_category", func(m *telebot.Message) {
+
+	})
+
 	b.Handle("/show_categories", func(m *telebot.Message) {
 		handleShowCategories(b, m, storageInstance)
 	})
@@ -44,7 +48,24 @@ func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storag
 	if len(prefixes) == 0 {
 		return
 	}
+
 	switch prefixes[0] {
+	case "cat":
+		markup := &telebot.ReplyMarkup{}
+		btnDelete := markup.Data("Удалить", "delete:"+prefixes[1])
+		markup.Inline(markup.Row(btnDelete))
+		b.Edit(c.Message, "Выберите действие:", markup)
+
+	case "delete":
+		categoryId, err := strconv.ParseInt(prefixes[1], 10, 64)
+		if err != nil {
+			log.Printf("error parse amount from prefixes: %s", prefixes[3])
+			b.Send(c.Sender, "Error when deleting a category.")
+			return
+		}
+
+		storageInstance.DeleteCategory(c.Sender.ID, categoryId)
+		b.Send(c.Sender, "Категория удалена")
 
 	case "expense":
 		handleTransactionCategories(b, c, storageInstance)
@@ -72,6 +93,7 @@ func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storag
 			b.Send(c.Sender, "Ошибка при создание и сохранение транзакции")
 			return
 		}
+
 		b.Send(c.Sender, fmt.Sprintf("Транзакция на сумму %s в категорию %q добавлена.", prefixes[3], prefixes[2]))
 
 	case "today":
