@@ -83,13 +83,19 @@ func handleTransactionCategories(b *telebot.Bot, c *telebot.Callback, storageIns
 	}
 
 	markup := &telebot.ReplyMarkup{}
-	var btns []telebot.Btn
+	var allRows []telebot.Row
+	var row telebot.Row
 
-	for _, category := range categories {
+	for i, category := range categories {
 		btn := markup.Data(category.Name, "transaction:"+strconv.Itoa(int(category.ID))+":"+c.Data)
-		btns = append(btns, btn)
+		row = append(row, btn)
+
+		if (i+1)%3 == 0 || i == len(categories)-1 {
+			allRows = append(allRows, row)
+			row = telebot.Row{}
+		}
 	}
-	markup.Inline(markup.Row(btns...))
+	markup.Inline(allRows...)
 	b.Edit(c.Message, "Выберите категорию:", markup)
 }
 
