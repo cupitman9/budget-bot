@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/lib/pq"
 	"telegram-budget-bot/internal/model"
 	"time"
@@ -34,6 +35,15 @@ func (s *Storage) AddCategory(category model.Category) error {
 	query := `INSERT INTO categories (name, chat_id) VALUES ($1, $2)`
 	_, err := s.db.Exec(query, category.Name, category.ChatID)
 	return err
+}
+
+func (s *Storage) RenameCategory(categoryId int64, newName string) error {
+	query := `UPDATE categories SET name = $1 WHERE id = $2`
+	_, err := s.db.Exec(query, newName, categoryId)
+	if err != nil {
+		return fmt.Errorf("не удалось переименовать категорию: %v", err)
+	}
+	return nil
 }
 
 func (s *Storage) DeleteCategory(chatID, categoryId int64) error {

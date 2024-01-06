@@ -19,12 +19,32 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage) {
 		handleAddCategory(b, m, storageInstance)
 	})
 
-	b.Handle("/del_category", func(m *telebot.Message) {
-
-	})
-
 	b.Handle("/show_categories", func(m *telebot.Message) {
 		handleShowCategories(b, m, storageInstance)
+	})
+
+	b.Handle("/rename", func(m *telebot.Message) {
+		args := strings.Fields(m.Payload)
+		if len(args) != 2 {
+			b.Send(m.Sender, "Используйте: /rename <ID_категории> <новое_название>")
+			return
+		}
+
+		categoryId, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			b.Send(m.Sender, "Неверный формат ID категории")
+			return
+		}
+
+		newName := args[1]
+		err = storageInstance.RenameCategory(categoryId, newName)
+		if err != nil {
+			b.Send(m.Sender, "Ошибка при переименовании категории: "+err.Error())
+			return
+		}
+
+		b.Send(m.Sender, "Категория успешно переименована в '"+newName+"'")
+
 	})
 
 	b.Handle("/stats", func(m *telebot.Message) {
@@ -50,16 +70,14 @@ func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storag
 	}
 
 	switch prefixes[0] {
-	case "cat":
-		markup := &telebot.ReplyMarkup{}
-		btnDelete := markup.Data("Удалить", "delete:"+prefixes[1])
-		markup.Inline(markup.Row(btnDelete))
-		b.Edit(c.Message, "Выберите действие:", markup)
+
+	case "rename":
+		b.Send(c.Sender, "Для переименования используйте: /rename <номер> <новое_название>")
 
 	case "delete":
 		categoryId, err := strconv.ParseInt(prefixes[1], 10, 64)
 		if err != nil {
-			log.Printf("error parse amount from prefixes: %s", prefixes[3])
+			log.Printf("error when deleting a category. %s", prefixes[3])
 			b.Send(c.Sender, "Error when deleting a category.")
 			return
 		}

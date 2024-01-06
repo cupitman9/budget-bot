@@ -62,11 +62,15 @@ func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *s
 	markup := &telebot.ReplyMarkup{}
 	var rows []telebot.Row
 	for _, category := range categories {
-		btn := markup.Data(category.Name, "cat:"+strconv.Itoa(int(category.ID)))
-		rows = append(rows, markup.Row(btn))
+		btnCategory := markup.Text(category.Name)
+		btnRename := markup.Data("Переименовать номер "+strconv.Itoa(int(category.ID)), "rename:")
+		btnDelete := markup.Data("Удалить", "delete:"+strconv.Itoa(int(category.ID)))
+		rows = append(rows, markup.Row(btnCategory))
+		rows = append(rows, markup.Row(btnRename, btnDelete))
 	}
+
 	markup.Inline(rows...)
-	b.Send(m.Sender, "Выберите категорию:", markup)
+	b.Send(m.Sender, "Категории:", markup)
 }
 
 func handleIncomeExpenseButtons(b *telebot.Bot, m *telebot.Message) {
