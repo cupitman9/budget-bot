@@ -37,13 +37,28 @@ func (s *Storage) AddCategory(category model.Category) error {
 }
 
 func (s *Storage) DeleteCategory(chatID, categoryId int64) error {
-	query := `DELETE FROM categories WHERE id = $1 AND chat_id = $2`
-	_, err := s.db.Exec(query, categoryId, chatID)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`UPDATE transactions SET is_deleted = TRUE WHERE category_id = $1 AND user_chat = $2`, categoryId, chatID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`UPDATE categories SET is_deleted = TRUE WHERE id = $1 AND chat_id = $2`, categoryId, chatID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *Storage) GetCategoriesByChatID(chatID int64) ([]model.Category, error) {
-	query := `SELECT id, name FROM categories WHERE chat_id = $1`
+	query := `SELECT id, name FROM categories WHERE chat_id = $1 AND is_deleted = FALSE`
 	rows, err := s.db.Query(query, chatID)
 	if err != nil {
 		return nil, err
@@ -75,7 +90,10 @@ func (s *Storage) GetTransactionsStatsByCategory(chatID int64, startDate, endDat
 	query := `SELECT c.name, t.transaction_type, SUM(t.amount)
               FROM transactions t
               JOIN categories c ON t.category_id = c.id
-              WHERE t.user_chat = $1 AND t.created_at >= $2 AND t.created_at < $3
+              WHERE t.user_chat = $1 
+                AND t.created_at >= $2 
+                AND t.created_at < $3
+                AND c.is_deleted = FALSE
               GROUP BY c.name, t.transaction_type`
 
 	rows, err := s.db.Query(query, chatID, startDate, endDate)
