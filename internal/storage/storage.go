@@ -96,7 +96,6 @@ func (s *Storage) AddTransaction(transaction model.Transaction) error {
 func (s *Storage) GetTransactionsStatsByCategory(chatID int64, startDate, endDate time.Time) (map[string]float64, map[string]float64, error) {
 	incomeCategories := make(map[string]float64)
 	expenseCategories := make(map[string]float64)
-
 	query := `SELECT c.name, t.transaction_type, SUM(t.amount)
               FROM transactions t
               JOIN categories c ON t.category_id = c.id

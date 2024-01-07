@@ -32,10 +32,13 @@ const (
 	StateAwaitingNewCategoryName
 	StateAwaitingRenameCategory
 	StateAwaitingTransactionAmount UserState = iota
+	StateAwaitingPeriod            UserState = iota
 )
 
 type UserSession struct {
 	State             UserState
 	CategoryID        int
 	TransactionAmount float64
+	StartDate         time.Time
+	EndDate           time.Time
 }

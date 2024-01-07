@@ -16,6 +16,10 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, userSess
 		handleStart(b, m, storageInstance)
 	})
 
+	b.Handle("/help", func(m *telebot.Message) {
+		handleHelp(b, m)
+	})
+
 	b.Handle("/add_category", func(m *telebot.Message) {
 		userSessions[m.Sender.ID] = &model.UserSession{
 			State: model.StateAwaitingNewCategoryName,
@@ -43,25 +47,28 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, userSess
 func handleOnText(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
 	if _, err := strconv.ParseFloat(m.Text, 64); err == nil {
 		handleIncomeExpenseButtons(b, m)
-	}
-	session, exists := userSessions[m.Sender.ID]
-	if !exists {
-		// Если сессии нет, можно обрабатывать сообщение как обычно
-		// Например, можно обрабатывать общие запросы или команды
-		// ...
 		return
 	}
+	session, exists := userSessions[m.Sender.ID]
+	if exists {
+		switch session.State {
 
-	switch session.State {
-	case model.StateAwaitingRenameCategory:
-		handleAwaitingRenameCategory(b, m, storageInstance, session, userSessions)
-	case model.StateAwaitingNewCategoryName:
-		handleAwaitingNewCategoryName(b, m, storageInstance, userSessions)
-	default:
-		//handleDefaultText(b, m)
+		case model.StateAwaitingRenameCategory:
+			handleAwaitingRenameCategory(b, m, storageInstance, session, userSessions)
+			return
+		case model.StateAwaitingNewCategoryName:
+			handleAwaitingNewCategoryName(b, m, storageInstance, userSessions)
+			return
+		case model.StateAwaitingPeriod:
+			handlePeriodInput(b, m, storageInstance, userSessions)
+			return
+		default:
+			b.Send(m.Sender, "Извините, я не понимаю эту команду.")
+			return
+		}
 	}
+	b.Send(m.Sender, "Извините, я не понимаю эту команду. Введите /help для списка команд.")
 }
-
 func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
 	x := strings.ReplaceAll(c.Data, "\f", "")
 	prefixes := strings.Split(x, ":")
@@ -70,6 +77,7 @@ func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storag
 	}
 
 	switch prefixes[0] {
+
 	case "rename":
 		handleRenameCallback(b, c, userSessions, prefixes[1])
 	case "delete":
@@ -84,11 +92,30 @@ func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storag
 
 		handleTransactionCallback(b, c, storageInstance)
 	case "today":
+		handleTodayCallback(b, c, storageInstance)
 
-		handleTodayCallback(b, c, storageInstance, userSessions)
+	case "period":
+		userSessions[c.Sender.ID] = &model.UserSession{
+			State: model.StateAwaitingPeriod,
+		}
+		b.Send(c.Sender, "Введите период в формате ДД.ММ.ГГГГ-ДД.ММ.ГГГГ:")
+
 	default:
-		b.Send(c.Sender, "Неизвестная команда")
+		b.Send(c.Sender, "Команда не распознана. Пожалуйста, используйте одну из доступных команд.")
 	}
+}
+
+func handleHelp(b *telebot.Bot, m *telebot.Message) {
+	helpMessage := "Команды бота:\n" +
+		"/start - начать работу с ботом\n" +
+		"/add_category - добавить новую категорию\n" +
+		"/show_categories - показать все категории\n" +
+		"/stats - показать статистику\n" +
+		"/help - показать эту справку\n" +
+		"...\n" +
+		"Для добавления транзакции просто введите сумму."
+
+	b.Send(m.Sender, helpMessage)
 }
 
 func handleAwaitingRenameCategory(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, session *model.UserSession, userSessions map[int64]*model.UserSession) {
@@ -118,7 +145,7 @@ func handleAwaitingNewCategoryName(b *telebot.Bot, m *telebot.Message, storageIn
 }
 
 func handleRenameCallback(b *telebot.Bot, c *telebot.Callback, userSessions map[int64]*model.UserSession, id string) {
-	categoryId, err := strconv.ParseInt(id, 10, 64)
+	categoryId, err := parseCategoryId(id)
 	if err != nil {
 		b.Send(c.Sender, "Ошибка формата ID категории")
 		return
@@ -131,7 +158,7 @@ func handleRenameCallback(b *telebot.Bot, c *telebot.Callback, userSessions map[
 }
 
 func handleDeleteCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage, id string) {
-	categoryId, err := strconv.ParseInt(id, 10, 64)
+	categoryId, err := parseCategoryId(id)
 	if err != nil {
 		b.Send(c.Sender, "Ошибка при удалении категории.")
 		return
@@ -169,10 +196,28 @@ func handleTransactionCallback(b *telebot.Bot, c *telebot.Callback, storageInsta
 	}
 }
 
-func handleTodayCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
+func handleTodayCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage) {
 	var startDate, endDate time.Time
 	now := time.Now()
 	startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	endDate = startDate.Add(24 * time.Hour)
 	handleStats(b, c.Sender, storageInstance, startDate, endDate)
+}
+
+func handlePeriodInput(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
+	periodParts := strings.Split(m.Text, "-")
+	if len(periodParts) != 2 {
+		b.Send(m.Sender, "Неправильный формат периода. Используйте формат ДД.ММ.ГГГГ-ДД.ММ.ГГГГ.")
+		return
+	}
+
+	startDate, errStart := time.Parse("02.01.2006", periodParts[0])
+	endDate, errEnd := time.Parse("02.01.2006", periodParts[1])
+	if errStart != nil || errEnd != nil {
+		b.Send(m.Sender, "Ошибка в датах. Используйте формат ДД.ММ.ГГГГ.")
+		return
+	}
+
+	handleStats(b, m.Sender, storageInstance, startDate, endDate)
+	delete(userSessions, m.Sender.ID)
 }

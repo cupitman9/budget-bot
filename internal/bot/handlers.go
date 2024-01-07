@@ -27,19 +27,6 @@ func handleStart(b *telebot.Bot, m *telebot.Message, storageInstance *storage.St
 	b.Send(m.Sender, welcomeText)
 }
 
-func handleAddCategory(categoryName string, b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
-	category := model.Category{
-		Name:   categoryName,
-		ChatID: m.Chat.ID,
-	}
-
-	if err := storageInstance.AddCategory(category); err != nil {
-		b.Send(m.Sender, fmt.Sprintf("Ошибка при добавлении категории: %v", err))
-		return
-	}
-	b.Send(m.Sender, fmt.Sprintf("Категория '%s' успешно добавлена!", categoryName))
-}
-
 func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
 	categories, err := storageInstance.GetCategoriesByChatID(m.Chat.ID)
 	if err != nil {
@@ -116,7 +103,8 @@ func handleTransaction(senderId, categoryId int64, amount float64, categoryType 
 func handleStatsButtons(b *telebot.Bot, m *telebot.Message) {
 	markup := &telebot.ReplyMarkup{}
 	btnToday := markup.Data("Сегодня", "today")
-	markup.Inline(markup.Row(btnToday))
+	btnPeriod := markup.Data("Период", "period")
+	markup.Inline(markup.Row(btnToday, btnPeriod))
 	b.Send(m.Sender, "Выберите период:", markup)
 }
 
