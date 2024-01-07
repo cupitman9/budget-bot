@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"gopkg.in/tucnak/telebot.v2"
-	"log"
 	"telegram-budget-bot/internal/bot"
 	"telegram-budget-bot/internal/config"
 	"telegram-budget-bot/internal/logger"
@@ -15,7 +14,7 @@ import (
 var userSessions = make(map[int64]*model.UserSession)
 
 func main() {
-	logger.SetupLogger("application.log")
+	log := logger.GetLogger()
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -35,9 +34,10 @@ func main() {
 	}
 	botAPI, err := telebot.NewBot(botSettings)
 	if err != nil {
-		logger.ErrorLogger.Fatalf("Error creating bot instance: %v", err)
+		log.Fatalf("Error creating bot instance: %v", err)
 	}
 
 	bot.RegisterHandlers(botAPI, storageInstance, userSessions)
+	log.Info("Bot start")
 	botAPI.Start()
 }

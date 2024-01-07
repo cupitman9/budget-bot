@@ -5,10 +5,13 @@ import (
 	"gopkg.in/tucnak/telebot.v2"
 	"strconv"
 	"strings"
+	"telegram-budget-bot/internal/logger"
 	"telegram-budget-bot/internal/model"
 	"telegram-budget-bot/internal/storage"
 	"time"
 )
+
+var log = logger.GetLogger()
 
 func handleStart(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
 	user := model.User{
@@ -19,25 +22,34 @@ func handleStart(b *telebot.Bot, m *telebot.Message, storageInstance *storage.St
 	}
 
 	if err := storageInstance.AddUser(user); err != nil {
+		log.Errorf("Error adding user: %v", err)
 		b.Send(m.Sender, "Ошибка при добавлении пользователя:", err)
 		return
 	}
+
+	log.Infof("User %s added successfully", user.Username)
 
 	welcomeText := "Привет! Нажмите /help для подробной информации"
 	b.Send(m.Sender, welcomeText)
 }
 
 func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
+	log.Info("Retrieving categories")
+
 	categories, err := storageInstance.GetCategoriesByChatID(m.Chat.ID)
 	if err != nil {
+		log.Errorf("Error retrieving categories: %v", err)
 		b.Send(m.Sender, fmt.Sprintf("Ошибка при получении категорий: %v", err))
 		return
 	}
 
 	if len(categories) == 0 {
+		log.Info("No categories found")
 		b.Send(m.Sender, "Категории отсутствуют.")
 		return
 	}
+
+	log.Infof("Found %d categories", len(categories))
 
 	markup := &telebot.ReplyMarkup{}
 	var rows []telebot.Row
@@ -54,6 +66,8 @@ func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *s
 }
 
 func handleIncomeExpenseButtons(b *telebot.Bot, m *telebot.Message) {
+	log.Info("Handling income and expense buttons")
+
 	markup := &telebot.ReplyMarkup{}
 	btnIncome := markup.Data("Доход", "income:"+m.Text)
 	btnExpense := markup.Data("Расход", "expense:"+m.Text)
@@ -62,11 +76,22 @@ func handleIncomeExpenseButtons(b *telebot.Bot, m *telebot.Message) {
 }
 
 func handleTransactionCategories(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage) {
+	log.Info("Retrieving transaction categories")
+
 	categories, err := storageInstance.GetCategoriesByChatID(c.Sender.ID)
 	if err != nil {
+		log.Errorf("Error retrieving categories: %v", err)
 		b.Send(c.Sender, "Ошибка при получении категорий.")
 		return
 	}
+
+	if len(categories) == 0 {
+		log.Info("No categories found")
+		b.Send(c.Sender, "Категории отсутствуют.")
+		return
+	}
+
+	log.Infof("Found %d categories", len(categories))
 
 	markup := &telebot.ReplyMarkup{}
 	var allRows []telebot.Row
@@ -86,6 +111,8 @@ func handleTransactionCategories(b *telebot.Bot, c *telebot.Callback, storageIns
 }
 
 func handleTransaction(senderId, categoryId int64, amount float64, categoryType string, storageInstance *storage.Storage) error {
+	log.Infof("Handling transaction: SenderID=%d, CategoryID=%d, Amount=%.2f, Type=%s", senderId, categoryId, amount, categoryType)
+
 	transaction := model.Transaction{
 		UserChat:        senderId,
 		CategoryID:      categoryId,
@@ -95,12 +122,17 @@ func handleTransaction(senderId, categoryId int64, amount float64, categoryType 
 	}
 
 	if err := storageInstance.AddTransaction(transaction); err != nil {
+		log.Errorf("Error adding transaction: %v", err)
 		return err
 	}
+
+	log.Info("Transaction added successfully")
 	return nil
 }
 
 func handleStatsButtons(b *telebot.Bot, m *telebot.Message) {
+	log.Info("Handling stats buttons")
+
 	markup := &telebot.ReplyMarkup{}
 	btnToday := markup.Data("Сегодня", "today")
 	btnPeriod := markup.Data("Период", "period")
@@ -109,8 +141,10 @@ func handleStatsButtons(b *telebot.Bot, m *telebot.Message) {
 }
 
 func handleStats(b *telebot.Bot, sender *telebot.User, storageInstance *storage.Storage, startDate, endDate time.Time) {
+	log.Infof("Handling stats: SenderID=%d, StartDate=%s, EndDate=%s", sender.ID, startDate, endDate)
 	incomeCategories, expenseCategories, err := storageInstance.GetTransactionsStatsByCategory(sender.ID, startDate, endDate)
 	if err != nil {
+		log.Errorf("Error retrieving statistics: %v", err)
 		b.Send(sender, "Ошибка при получении статистики: "+err.Error())
 		return
 	}
@@ -118,6 +152,7 @@ func handleStats(b *telebot.Bot, sender *telebot.User, storageInstance *storage.
 	totalIncome := sumMapValues(incomeCategories)
 	totalExpense := sumMapValues(expenseCategories)
 	netIncome := totalIncome - totalExpense
+	log.Infof("Statistics retrieved: TotalIncome=%.1f, TotalExpense=%.1f, NetIncome=%.1f", totalIncome, totalExpense, netIncome)
 
 	var response strings.Builder
 	response.WriteString("📊 *Статистика за период*\n\n")

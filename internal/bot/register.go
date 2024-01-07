@@ -3,7 +3,6 @@ package bot
 import (
 	"fmt"
 	"gopkg.in/tucnak/telebot.v2"
-	"log"
 	"strconv"
 	"strings"
 	"telegram-budget-bot/internal/model"
@@ -12,15 +11,19 @@ import (
 )
 
 func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
+
 	b.Handle("/start", func(m *telebot.Message) {
+		log.Infof("Processing /start for user %d", m.Sender.ID)
 		handleStart(b, m, storageInstance)
 	})
 
 	b.Handle("/help", func(m *telebot.Message) {
+		log.Infof("Processing /help for user %d", m.Sender.ID)
 		handleHelp(b, m)
 	})
 
 	b.Handle("/add_category", func(m *telebot.Message) {
+		log.Infof("Processing /add_category for user %d", m.Sender.ID)
 		userSessions[m.Sender.ID] = &model.UserSession{
 			State: model.StateAwaitingNewCategoryName,
 		}
@@ -28,84 +31,96 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, userSess
 	})
 
 	b.Handle("/show_categories", func(m *telebot.Message) {
+		log.Infof("Processing /show_categories for user %d", m.Sender.ID)
 		handleShowCategories(b, m, storageInstance)
 	})
 
 	b.Handle("/stats", func(m *telebot.Message) {
+		log.Infof("Processing /stats for user %d", m.Sender.ID)
 		handleStatsButtons(b, m)
 	})
 
 	b.Handle(telebot.OnText, func(m *telebot.Message) {
+		log.Infof("Processing text from user %d: %s", m.Sender.ID, m.Text)
 		handleOnText(b, m, storageInstance, userSessions)
 	})
 
 	b.Handle(telebot.OnCallback, func(c *telebot.Callback) {
+		log.Infof("Processing callback from user %d: %s", c.Sender.ID, c.Data)
 		handleCallback(b, c, storageInstance, userSessions)
 	})
 }
 
 func handleOnText(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
 	if _, err := strconv.ParseFloat(m.Text, 64); err == nil {
+		log.Infof("Processing number from user %d: %s", m.Sender.ID, m.Text)
 		handleIncomeExpenseButtons(b, m)
 		return
 	}
 	session, exists := userSessions[m.Sender.ID]
 	if exists {
 		switch session.State {
-
 		case model.StateAwaitingRenameCategory:
+			log.Infof("Renaming category by user %d", m.Sender.ID)
 			handleAwaitingRenameCategory(b, m, storageInstance, session, userSessions)
 			return
 		case model.StateAwaitingNewCategoryName:
+			log.Infof("Adding a new category by user %d", m.Sender.ID)
 			handleAwaitingNewCategoryName(b, m, storageInstance, userSessions)
 			return
 		case model.StateAwaitingPeriod:
+			log.Infof("User %d entering a period", m.Sender.ID)
 			handlePeriodInput(b, m, storageInstance, userSessions)
 			return
 		default:
+			log.Warnf("Unknown command from user %d: %s", m.Sender.ID, m.Text)
 			b.Send(m.Sender, "Извините, я не понимаю эту команду.")
 			return
 		}
 	}
+	log.Warnf("Unknown command from user %d: %s", m.Sender.ID, m.Text)
 	b.Send(m.Sender, "Извините, я не понимаю эту команду. Введите /help для списка команд.")
 }
 func handleCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
 	x := strings.ReplaceAll(c.Data, "\f", "")
 	prefixes := strings.Split(x, ":")
 	if len(prefixes) == 0 {
+		log.Warnf("Empty callback from user %d", c.Sender.ID)
 		return
 	}
 
 	switch prefixes[0] {
-
 	case "rename":
+		log.Infof("Renaming category through callback by user %d", c.Sender.ID)
 		handleRenameCallback(b, c, userSessions, prefixes[1])
 	case "delete":
-
+		log.Infof("Deleting category through callback by user %d", c.Sender.ID)
 		handleDeleteCallback(b, c, storageInstance, prefixes[1])
 	case "expense":
+		log.Infof("Processing expenses through callback by user %d", c.Sender.ID)
 		handleTransactionCategories(b, c, storageInstance)
 	case "income":
-
+		log.Infof("Processing income through callback by user %d", c.Sender.ID)
 		handleTransactionCategories(b, c, storageInstance)
 	case "transaction":
-
+		log.Infof("Processing transaction through callback by user %d", c.Sender.ID)
 		handleTransactionCallback(b, c, storageInstance)
 	case "today":
+		log.Infof("Processing today's statistics through callback by user %d", c.Sender.ID)
 		handleTodayCallback(b, c, storageInstance)
-
 	case "period":
-		userSessions[c.Sender.ID] = &model.UserSession{
-			State: model.StateAwaitingPeriod,
-		}
+		log.Infof("User %d entering a period through callback", c.Sender.ID)
+		userSessions[c.Sender.ID] = &model.UserSession{State: model.StateAwaitingPeriod}
 		b.Send(c.Sender, "Введите период в формате ДД.ММ.ГГГГ-ДД.ММ.ГГГГ:")
-
 	default:
+		log.Warnf("Unknown command through callback from user %d", c.Sender.ID)
 		b.Send(c.Sender, "Команда не распознана. Пожалуйста, используйте одну из доступных команд.")
 	}
 }
 
 func handleHelp(b *telebot.Bot, m *telebot.Message) {
+	log.Infof("Processing /help for user %d", m.Sender.ID)
+
 	helpMessage := "Команды бота:\n" +
 		"/start - начать работу с ботом\n" +
 		"/add_category - добавить новую категорию\n" +
@@ -119,6 +134,8 @@ func handleHelp(b *telebot.Bot, m *telebot.Message) {
 }
 
 func handleAwaitingRenameCategory(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, session *model.UserSession, userSessions map[int64]*model.UserSession) {
+	log.Infof("Renaming category for user %d", m.Sender.ID)
+
 	newCategoryName := m.Text
 	categoryId := session.CategoryID
 	err := storageInstance.RenameCategory(int64(categoryId), newCategoryName)
@@ -131,6 +148,8 @@ func handleAwaitingRenameCategory(b *telebot.Bot, m *telebot.Message, storageIns
 }
 
 func handleAwaitingNewCategoryName(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
+	log.Infof("Adding new category for user %d", m.Sender.ID)
+
 	categoryName := m.Text
 	err := storageInstance.AddCategory(model.Category{
 		Name:   categoryName,
@@ -145,6 +164,8 @@ func handleAwaitingNewCategoryName(b *telebot.Bot, m *telebot.Message, storageIn
 }
 
 func handleRenameCallback(b *telebot.Bot, c *telebot.Callback, userSessions map[int64]*model.UserSession, id string) {
+	log.Infof("Processing category rename request from user %d", c.Sender.ID)
+
 	categoryId, err := parseCategoryId(id)
 	if err != nil {
 		b.Send(c.Sender, "Ошибка формата ID категории")
@@ -158,6 +179,8 @@ func handleRenameCallback(b *telebot.Bot, c *telebot.Callback, userSessions map[
 }
 
 func handleDeleteCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage, id string) {
+	log.Infof("Processing delete category request from user %d", c.Sender.ID)
+
 	categoryId, err := parseCategoryId(id)
 	if err != nil {
 		b.Send(c.Sender, "Ошибка при удалении категории.")
@@ -172,18 +195,20 @@ func handleDeleteCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *
 }
 
 func handleTransactionCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage) {
+	log.Infof("Processing transaction for user %d", c.Sender.ID)
+
 	x := strings.ReplaceAll(c.Data, "\f", "")
 	prefixes := strings.Split(strings.TrimSpace(x), ":")
 	categoryId, err := strconv.ParseInt(prefixes[1], 10, 64)
 	if err != nil {
-		log.Printf("error parse categoryId from prefixes: %s", prefixes[1])
+		log.Errorf("Error parsing category ID from prefixes: %s", prefixes[1])
 		b.Send(c.Sender, "Ошибка при обработке категории")
 		return
 	}
 
 	amount, err := strconv.ParseFloat(prefixes[3], 10)
 	if err != nil {
-		log.Printf("error parse amount from prefixes: %s", prefixes[3])
+		log.Errorf("Error parsing amount from prefixes: %s", prefixes[3])
 		b.Send(c.Sender, "Ошибка при обработке суммы")
 		return
 	}
@@ -197,6 +222,8 @@ func handleTransactionCallback(b *telebot.Bot, c *telebot.Callback, storageInsta
 }
 
 func handleTodayCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *storage.Storage) {
+	log.Infof("Processing today's stats for user %d", c.Sender.ID)
+
 	var startDate, endDate time.Time
 	now := time.Now()
 	startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -205,6 +232,8 @@ func handleTodayCallback(b *telebot.Bot, c *telebot.Callback, storageInstance *s
 }
 
 func handlePeriodInput(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage, userSessions map[int64]*model.UserSession) {
+	log.Infof("Processing period input from user %d", m.Sender.ID)
+
 	periodParts := strings.Split(m.Text, "-")
 	if len(periodParts) != 2 {
 		b.Send(m.Sender, "Неправильный формат периода. Используйте формат ДД.ММ.ГГГГ-ДД.ММ.ГГГГ.")

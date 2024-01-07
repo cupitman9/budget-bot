@@ -1,18 +1,30 @@
 package logger
 
 import (
-	"io"
-	"log"
+	"github.com/sirupsen/logrus"
 	"os"
 )
 
-var ErrorLogger *log.Logger
+var log *logrus.Logger
 
-func SetupLogger(logFile string) {
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+func init() {
+
+	log = logrus.New()
+
+	file, err := os.OpenFile("application.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalf("Ошибка при создании файла лога: %v", err)
+		logrus.Fatal("Не удалось открыть файл логов:", err)
 	}
 
-	ErrorLogger = log.New(io.MultiWriter(file, os.Stderr), "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	log.SetOutput(file)
+
+	log.SetLevel(logrus.InfoLevel)
+
+	log.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+}
+
+func GetLogger() *logrus.Logger {
+	return log
 }
