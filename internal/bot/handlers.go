@@ -27,13 +27,7 @@ func handleStart(b *telebot.Bot, m *telebot.Message, storageInstance *storage.St
 	b.Send(m.Sender, welcomeText)
 }
 
-func handleAddCategory(b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
-	categoryName := strings.TrimSpace(m.Payload)
-	if categoryName == "" {
-		b.Send(m.Sender, "Пожалуйста, укажите название категории.")
-		return
-	}
-
+func handleAddCategory(categoryName string, b *telebot.Bot, m *telebot.Message, storageInstance *storage.Storage) {
 	category := model.Category{
 		Name:   categoryName,
 		ChatID: m.Chat.ID,
@@ -43,7 +37,6 @@ func handleAddCategory(b *telebot.Bot, m *telebot.Message, storageInstance *stor
 		b.Send(m.Sender, fmt.Sprintf("Ошибка при добавлении категории: %v", err))
 		return
 	}
-
 	b.Send(m.Sender, fmt.Sprintf("Категория '%s' успешно добавлена!", categoryName))
 }
 
@@ -63,7 +56,7 @@ func handleShowCategories(b *telebot.Bot, m *telebot.Message, storageInstance *s
 	var rows []telebot.Row
 	for _, category := range categories {
 		btnCategory := markup.Text(category.Name)
-		btnRename := markup.Data("Переименовать номер "+strconv.Itoa(int(category.ID)), "rename:")
+		btnRename := markup.Data("Переименовать", "rename:"+strconv.Itoa(int(category.ID)))
 		btnDelete := markup.Data("Удалить", "delete:"+strconv.Itoa(int(category.ID)))
 		rows = append(rows, markup.Row(btnCategory))
 		rows = append(rows, markup.Row(btnRename, btnDelete))
@@ -124,7 +117,7 @@ func handleStatsButtons(b *telebot.Bot, m *telebot.Message) {
 	markup := &telebot.ReplyMarkup{}
 	btnToday := markup.Data("Сегодня", "today")
 	markup.Inline(markup.Row(btnToday))
-	b.Send(m.Sender, "Выберите тип транзакции:", markup)
+	b.Send(m.Sender, "Выберите период:", markup)
 }
 
 func handleStats(b *telebot.Bot, sender *telebot.User, storageInstance *storage.Storage, startDate, endDate time.Time) {

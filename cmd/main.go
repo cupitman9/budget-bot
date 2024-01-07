@@ -7,9 +7,12 @@ import (
 	"telegram-budget-bot/internal/bot"
 	"telegram-budget-bot/internal/config"
 	"telegram-budget-bot/internal/logger"
+	"telegram-budget-bot/internal/model"
 	"telegram-budget-bot/internal/storage"
 	"time"
 )
+
+var userSessions = make(map[int64]*model.UserSession)
 
 func main() {
 	logger.SetupLogger("application.log")
@@ -35,6 +38,6 @@ func main() {
 		logger.ErrorLogger.Fatalf("Error creating bot instance: %v", err)
 	}
 
-	bot.RegisterHandlers(botAPI, storageInstance)
+	bot.RegisterHandlers(botAPI, storageInstance, userSessions)
 	botAPI.Start()
 }

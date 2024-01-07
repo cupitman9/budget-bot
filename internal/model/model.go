@@ -24,3 +24,18 @@ type Transaction struct {
 	TransactionType string
 	CreatedAt       time.Time
 }
+
+type UserState int
+
+const (
+	StateNone UserState = iota
+	StateAwaitingNewCategoryName
+	StateAwaitingRenameCategory
+	StateAwaitingTransactionAmount UserState = iota
+)
+
+type UserSession struct {
+	State             UserState
+	CategoryID        int
+	TransactionAmount float64
+}
