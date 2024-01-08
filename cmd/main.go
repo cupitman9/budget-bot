@@ -2,20 +2,21 @@ package main
 
 import (
 	"fmt"
+	"time"
+
 	"gopkg.in/tucnak/telebot.v2"
+
 	"telegram-budget-bot/internal/bot"
 	"telegram-budget-bot/internal/config"
 	"telegram-budget-bot/internal/logger"
 	"telegram-budget-bot/internal/model"
 	"telegram-budget-bot/internal/storage"
-	"time"
 )
 
 var userSessions = make(map[int64]*model.UserSession)
 
 func main() {
-	log := logger.GetLogger()
-
+	log := logger.New()
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Ошибка при загрузке конфигурации: %v", err)
@@ -37,7 +38,7 @@ func main() {
 		log.Fatalf("Error creating bot instance: %v", err)
 	}
 
-	bot.RegisterHandlers(botAPI, storageInstance, userSessions)
+	bot.RegisterHandlers(botAPI, storageInstance, log, userSessions)
 	log.Info("Bot start")
 	botAPI.Start()
 }
