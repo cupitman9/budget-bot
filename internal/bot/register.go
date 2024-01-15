@@ -4,8 +4,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/tucnak/telebot.v2"
 
-	"telegram-budget-bot/internal/model"
-	"telegram-budget-bot/internal/storage"
+	"budget-bot/internal/model"
+	"budget-bot/internal/storage"
 )
 
 func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, log *logrus.Logger, userSessions map[int64]*model.UserSession) {

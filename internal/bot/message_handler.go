@@ -9,8 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/tucnak/telebot.v2"
 
-	"telegram-budget-bot/internal/model"
-	"telegram-budget-bot/internal/storage"
+	"budget-bot/internal/model"
+	"budget-bot/internal/storage"
 )
 
 type messageHandler struct {

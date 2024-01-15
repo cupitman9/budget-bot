@@ -20,7 +20,6 @@ type Transaction struct {
 	UserChat        int64
 	CategoryID      int64
 	Amount          float64
-	Description     string
 	TransactionType string
 	CreatedAt       time.Time
 }

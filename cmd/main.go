@@ -1,17 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"time"
 
 	"gopkg.in/tucnak/telebot.v2"
 
-	"telegram-budget-bot/internal/bot"
-	"telegram-budget-bot/internal/config"
-	"telegram-budget-bot/internal/logger"
-	"telegram-budget-bot/internal/model"
-	"telegram-budget-bot/internal/storage"
+	"github.com/jackc/pgx/v4/pgxpool"
+
+	"budget-bot/internal/bot"
+	"budget-bot/internal/config"
+	"budget-bot/internal/logger"
+	"budget-bot/internal/model"
+	"budget-bot/internal/storage"
 )
 
 var userSessions = make(map[int64]*model.UserSession)
@@ -21,13 +23,26 @@ func main() {
 	if err != nil {
 		log.Fatalf("error loading configuration: %v", err)
 	}
+
 	appLogger := logger.New(cfg.LogLevel)
 
-	dbInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
-	storageInstance, err := storage.NewStorage(dbInfo)
+	if cfg.PostgresDSN == "" {
+		appLogger.Fatal("POSTGRES_DSN is not set")
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(cfg.PostgresDSN)
+	if err != nil {
+		appLogger.Fatalf("error parsing database configuration: %v", err)
+	}
+	pool, err := pgxpool.ConnectConfig(context.Background(), poolConfig)
 	if err != nil {
 		appLogger.Fatalf("unable to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	storageInstance, err := storage.NewStorage(pool)
+	if err != nil {
+		appLogger.Fatalf("unable to initialize storage: %v", err)
 	}
 
 	botSettings := telebot.Settings{
