@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"gopkg.in/tucnak/telebot.v2"
@@ -16,17 +17,17 @@ import (
 var userSessions = make(map[int64]*model.UserSession)
 
 func main() {
-	log := logger.New()
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Ошибка при загрузке конфигурации: %v", err)
+		log.Fatalf("error loading configuration: %v", err)
 	}
+	appLogger := logger.New(cfg.LogLevel)
 
 	dbInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
 	storageInstance, err := storage.NewStorage(dbInfo)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
+		appLogger.Fatalf("unable to connect to database: %v", err)
 	}
 
 	botSettings := telebot.Settings{
@@ -35,10 +36,10 @@ func main() {
 	}
 	botAPI, err := telebot.NewBot(botSettings)
 	if err != nil {
-		log.Fatalf("Error creating bot instance: %v", err)
+		appLogger.Fatalf("error creating bot instance: %v", err)
 	}
 
-	bot.RegisterHandlers(botAPI, storageInstance, log, userSessions)
-	log.Info("Bot start")
+	bot.RegisterHandlers(botAPI, storageInstance, appLogger, userSessions)
+	appLogger.Info("bot start")
 	botAPI.Start()
 }

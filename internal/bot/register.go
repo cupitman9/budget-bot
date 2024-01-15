@@ -13,17 +13,17 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, log *log
 	msgHandler := newMessageHandler(b, storageInstance, log)
 
 	b.Handle("/start", func(m *telebot.Message) {
-		log.Infof("Processing /start for user %d", m.Sender.ID)
+		log.Infof("processing /start for user %d", m.Sender.ID)
 		msgHandler.handleStart(m)
 	})
 
 	b.Handle("/help", func(m *telebot.Message) {
-		log.Infof("Processing /help for user %d", m.Sender.ID)
+		log.Infof("processing /help for user %d", m.Sender.ID)
 		msgHandler.handleHelp(m)
 	})
 
 	b.Handle("/add_category", func(m *telebot.Message) {
-		log.Infof("Processing /add_category for user %d", m.Sender.ID)
+		log.Infof("processing /add_category for user %d", m.Sender.ID)
 		userSessions[m.Sender.ID] = &model.UserSession{
 			State: model.StateAwaitingNewCategoryName,
 		}
@@ -31,22 +31,22 @@ func RegisterHandlers(b *telebot.Bot, storageInstance *storage.Storage, log *log
 	})
 
 	b.Handle("/show_categories", func(m *telebot.Message) {
-		log.Infof("Processing /show_categories for user %d", m.Sender.ID)
+		log.Infof("processing /show_categories for user %d", m.Sender.ID)
 		msgHandler.handleShowCategories(m)
 	})
 
 	b.Handle("/stats", func(m *telebot.Message) {
-		log.Infof("Processing /stats for user %d", m.Sender.ID)
+		log.Infof("processing /stats for user %d", m.Sender.ID)
 		msgHandler.handleStatsButtons(m)
 	})
 
 	b.Handle(telebot.OnText, func(m *telebot.Message) {
-		log.Infof("Processing text from user %d: %s", m.Sender.ID, m.Text)
+		log.Infof("processing text from user %d: %s", m.Sender.ID, m.Text)
 		msgHandler.handleOnText(m, userSessions)
 	})
 
 	b.Handle(telebot.OnCallback, func(c *telebot.Callback) {
-		log.Infof("Processing callback from user %d: %s", c.Sender.ID, c.Data)
+		log.Infof("processing callback from user %d: %s", c.Sender.ID, c.Data)
 		cbHandler.handleCallback(c, userSessions)
 	})
 }

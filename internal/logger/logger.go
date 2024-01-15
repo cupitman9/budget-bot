@@ -8,12 +8,12 @@ import (
 
 var log *logrus.Logger
 
-func New() *logrus.Logger {
+func New(logLevel string) *logrus.Logger {
 	log = logrus.New()
 
 	file, err := os.OpenFile("application.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		logrus.Fatal("Не удалось открыть файл логов:", err)
+		logrus.Fatal("failed to open log file:", err)
 	}
 
 	log.SetOutput(file)
