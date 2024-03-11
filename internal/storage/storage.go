@@ -5,34 +5,55 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	"budget-bot/internal/model"
+	"github.com/cupitman9/budget-bot/internal/model"
 )
 
 type Storage struct {
-	db *pgxpool.Pool
+	pool *pgxpool.Pool
 }
 
-func NewStorage(pool *pgxpool.Pool) (*Storage, error) {
-	return &Storage{db: pool}, nil
+func NewStorage(ctx context.Context, postgresDsn string) (*Storage, error) {
+	poolConfig, err := pgxpool.ParseConfig(postgresDsn)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing config: %w", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting: %w", err)
+	}
+
+	if err = pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("error pinging pool: %w", err)
+	}
+
+	return &Storage{pool: pool}, nil
 }
 
+func (s *Storage) Close() {
+	if s.pool != nil {
+		s.pool.Close()
+	}
+}
+
+// TODO: Проверить поля базы данных, запросы
 func (s *Storage) AddUser(user model.User) error {
 	query := `INSERT INTO users (username, chat_id, language, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`
-	_, err := s.db.Exec(context.Background(), query, user.Username, user.ChatID, user.Language, user.CreatedAt)
+	_, err := s.pool.Exec(context.Background(), query, user.Username, user.ChatID, user.Language, user.CreatedAt)
 	return err
 }
 
 func (s *Storage) AddCategory(category model.Category) error {
 	query := `INSERT INTO categories (name, chat_id) VALUES ($1, $2)`
-	_, err := s.db.Exec(context.Background(), query, category.Name, category.ChatID)
+	_, err := s.pool.Exec(context.Background(), query, category.Name, category.ChatID)
 	return err
 }
 
 func (s *Storage) RenameCategory(categoryId int64, newName string) error {
 	query := `UPDATE categories SET name = $1 WHERE id = $2`
-	_, err := s.db.Exec(context.Background(), query, newName, categoryId)
+	_, err := s.pool.Exec(context.Background(), query, newName, categoryId)
 	if err != nil {
 		return fmt.Errorf("не удалось переименовать категорию: %v", err)
 	}
@@ -40,7 +61,7 @@ func (s *Storage) RenameCategory(categoryId int64, newName string) error {
 }
 
 func (s *Storage) DeleteCategory(chatID, categoryId int64) error {
-	tx, err := s.db.Begin(context.Background())
+	tx, err := s.pool.Begin(context.Background())
 	if err != nil {
 		return err
 	}
@@ -62,7 +83,7 @@ func (s *Storage) DeleteCategory(chatID, categoryId int64) error {
 
 func (s *Storage) GetCategoriesByChatID(chatID int64) ([]model.Category, error) {
 	query := `SELECT id, name FROM categories WHERE chat_id = $1 AND is_deleted = FALSE`
-	rows, err := s.db.Query(context.Background(), query, chatID)
+	rows, err := s.pool.Query(context.Background(), query, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +103,7 @@ func (s *Storage) GetCategoriesByChatID(chatID int64) ([]model.Category, error) 
 
 func (s *Storage) AddTransaction(transaction model.Transaction) error {
 	query := `INSERT INTO transactions (user_chat, category_id, amount, transaction_type, created_at) VALUES ($1, $2, $3, $4, $5)`
-	_, err := s.db.Exec(context.Background(), query, transaction.UserChat, transaction.CategoryID, transaction.Amount, transaction.TransactionType, transaction.CreatedAt)
+	_, err := s.pool.Exec(context.Background(), query, transaction.UserChat, transaction.CategoryID, transaction.Amount, transaction.TransactionType, transaction.CreatedAt)
 	return err
 }
 
@@ -98,7 +119,7 @@ func (s *Storage) GetTransactionsStatsByCategory(chatID int64, startDate, endDat
                 AND c.is_deleted = FALSE
               GROUP BY c.name, t.transaction_type`
 
-	rows, err := s.db.Query(context.Background(), query, chatID, startDate, endDate)
+	rows, err := s.pool.Query(context.Background(), query, chatID, startDate, endDate)
 	if err != nil {
 		return nil, nil, err
 	}

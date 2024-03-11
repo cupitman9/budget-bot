@@ -5,18 +5,13 @@ import (
 	"log"
 	"time"
 
-	"gopkg.in/tucnak/telebot.v2"
+	"gopkg.in/telebot.v3"
 
-	"github.com/jackc/pgx/v4/pgxpool"
-
-	"budget-bot/internal/bot"
-	"budget-bot/internal/config"
-	"budget-bot/internal/logger"
-	"budget-bot/internal/model"
-	"budget-bot/internal/storage"
+	"github.com/cupitman9/budget-bot/internal/bot"
+	"github.com/cupitman9/budget-bot/internal/config"
+	"github.com/cupitman9/budget-bot/internal/logger"
+	"github.com/cupitman9/budget-bot/internal/storage"
 )
-
-var userSessions = make(map[int64]*model.UserSession)
 
 func main() {
 	cfg, err := config.LoadConfig()
@@ -26,24 +21,12 @@ func main() {
 
 	appLogger := logger.New(cfg.LogLevel)
 
-	if cfg.PostgresDSN == "" {
-		appLogger.Fatal("POSTGRES_DSN is not set")
-	}
-
-	poolConfig, err := pgxpool.ParseConfig(cfg.PostgresDSN)
+	ctx := context.Background()
+	appStorage, err := storage.NewStorage(ctx, cfg.PostgresDSN)
 	if err != nil {
-		appLogger.Fatalf("error parsing database configuration: %v", err)
+		appLogger.WithError(err).Fatal("error creating new storage")
 	}
-	pool, err := pgxpool.ConnectConfig(context.Background(), poolConfig)
-	if err != nil {
-		appLogger.Fatalf("unable to connect to database: %v", err)
-	}
-	defer pool.Close()
-
-	storageInstance, err := storage.NewStorage(pool)
-	if err != nil {
-		appLogger.Fatalf("unable to initialize storage: %v", err)
-	}
+	defer appStorage.Close()
 
 	botSettings := telebot.Settings{
 		Token:  cfg.BotToken,
@@ -51,10 +34,11 @@ func main() {
 	}
 	botAPI, err := telebot.NewBot(botSettings)
 	if err != nil {
-		appLogger.Fatalf("error creating bot instance: %v", err)
+		appLogger.WithError(err).Error("error creating bot instance")
+		return
 	}
 
-	bot.RegisterHandlers(botAPI, storageInstance, appLogger, userSessions)
-	appLogger.Info("bot start")
+	bot.RegisterHandlers(botAPI, appStorage, appLogger)
+	appLogger.Info("bot starting")
 	botAPI.Start()
 }

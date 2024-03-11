@@ -1,21 +1,21 @@
 package config
 
 import (
-	"os"
+	"fmt"
+
+	"github.com/caarlos0/env/v10"
 )
 
 type Config struct {
-	BotToken    string
-	BotDebug    bool
-	PostgresDSN string
-	LogLevel    string
+	BotToken    string `env:"TELEGRAM_BOT_TOKEN,required"`
+	PostgresDSN string `env:"POSTGRES_DSN,required"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
 }
 
 func LoadConfig() (*Config, error) {
-	return &Config{
-		BotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
-		BotDebug:    os.Getenv("BOT_DEBUG") == "true",
-		PostgresDSN: os.Getenv("POSTGRES_DSN"),
-		LogLevel:    os.Getenv("LOG_LEVEL"),
-	}, nil
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("error parsing config: %w", err)
+	}
+	return cfg, nil
 }

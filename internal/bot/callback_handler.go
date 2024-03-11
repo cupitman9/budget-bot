@@ -1,82 +1,98 @@
 package bot
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"gopkg.in/tucnak/telebot.v2"
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/telebot.v3"
 
-	"budget-bot/internal/model"
-	"budget-bot/internal/storage"
+	"github.com/cupitman9/budget-bot/internal/model"
+	"github.com/cupitman9/budget-bot/internal/storage"
 )
 
 type callbackHandler struct {
 	b               *telebot.Bot
 	storageInstance *storage.Storage
-	log             *logrus.Logger
+	log             *log.Logger
 }
 
-func newCallbackHandler(b *telebot.Bot, storageInstance *storage.Storage, log *logrus.Logger) *callbackHandler {
-	return &callbackHandler{
-		b:               b,
-		storageInstance: storageInstance,
-		log:             log,
-	}
+func newCallbackHandler(b *telebot.Bot, storageInstance *storage.Storage, log *log.Logger) *callbackHandler {
+	return &callbackHandler{b: b, storageInstance: storageInstance, log: log}
 }
 
-func (h *callbackHandler) handleCallback(c *telebot.Callback, userSessions map[int64]*model.UserSession) {
-	x := strings.ReplaceAll(c.Data, "\f", "")
+func (h *callbackHandler) handleCallback(c *telebot.Callback) error {
+	x := strings.ReplaceAll(c.Data, "\f", "") // telegram or this lib puts \f to data
 	prefixes := strings.Split(x, ":")
 	if len(prefixes) == 0 {
-		h.log.Warnf("empty callback from user %d", c.Sender.ID)
-		return
+		return errors.New("no prefixes after splitting")
 	}
 
 	switch prefixes[0] {
 	case "rename":
-		h.log.Infof("renaming category through callback by user %d", c.Sender.ID)
-		h.handleRenameCallback(c, userSessions, prefixes[1])
+		err := h.handleRenameCallback(c, prefixes[1])
+		if err != nil {
+			return fmt.Errorf("error handling rename callback: %w", err)
+		}
 	case "delete":
-		h.log.Infof("deleting category through callback by user %d", c.Sender.ID)
-		h.handleDeleteCallback(c, prefixes[1])
+		err := h.handleDeleteCallback(c, prefixes[1])
+		if err != nil {
+			return fmt.Errorf("error handling delete callback: %w", err)
+		}
 	case "expense":
-		h.log.Infof("processing expenses through callback by user %d", c.Sender.ID)
-		h.handleTransactionCategories(c)
+		err := h.handleTransactionCategories(c)
+		if err != nil {
+			return fmt.Errorf("error handling expense callback: %w", err)
+		}
 	case "income":
-		h.log.Infof("processing income through callback by user %d", c.Sender.ID)
-		h.handleTransactionCategories(c)
+		err := h.handleTransactionCategories(c)
+		if err != nil {
+			return fmt.Errorf("error handling income callback: %w", err)
+		}
 	case "transaction":
-		h.log.Infof("processing transaction through callback by user %d", c.Sender.ID)
-		h.handleTransactionCallback(c)
+		err := h.handleTransactionCallback(c)
+		if err != nil {
+			return fmt.Errorf("error handling transaction callback: %w", err)
+		}
 	case "today":
-		h.log.Infof("processing today's statistics through callback by user %d", c.Sender.ID)
-		h.handleTodayCallback(c)
+		err := h.handleTodayCallback(c)
+		if err != nil {
+			return fmt.Errorf("error handling today callback: %w", err)
+		}
 	case "period":
-		h.log.Infof("user %d entering a period through callback", c.Sender.ID)
 		userSessions[c.Sender.ID] = &model.UserSession{State: model.StateAwaitingPeriod}
-		h.b.Send(c.Sender, "Введите период в формате ДД.ММ.ГГГГ-ДД.ММ.ГГГГ:")
+		_, err := h.b.Send(c.Sender, "Введите период в формате ДД.ММ.ГГГГ-ДД.ММ.ГГГГ:")
+		if err != nil {
+			return fmt.Errorf("error sending message to choose period: %w", err)
+		}
 	default:
-		h.log.Warnf("unknown command through callback from user %d", c.Sender.ID)
-		h.b.Send(c.Sender, "Команда не распознана. Пожалуйста, используйте одну из доступных команд.")
+		_, err := h.b.Send(c.Sender, "Команда не распознана. Пожалуйста, используйте одну из доступных команд.")
+		if err != nil {
+			return fmt.Errorf("error sending message for undefined callback action: %w", err)
+		}
 	}
+	return nil
 }
 
-func (h *callbackHandler) handleTransactionCategories(c *telebot.Callback) {
-	h.log.Info("retrieving transaction categories")
+func (h *callbackHandler) handleTransactionCategories(c *telebot.Callback) error {
 	categories, err := h.storageInstance.GetCategoriesByChatID(c.Sender.ID)
 	if err != nil {
-		h.log.Errorf("error retrieving categories: %v", err)
-		h.b.Send(c.Sender, "Ошибка при получении категорий.")
-		return
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при получении категорий.")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return err
 	}
 
 	if len(categories) == 0 {
-		h.log.Info("no categories found")
-		h.b.Send(c.Sender, "Категории отсутствуют.")
-		return
+		_, err := h.b.Send(c.Sender, "Категории отсутствуют.")
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	h.log.Infof("found %d categories", len(categories))
@@ -95,80 +111,108 @@ func (h *callbackHandler) handleTransactionCategories(c *telebot.Callback) {
 		}
 	}
 	markup.Inline(allRows...)
-	h.b.Edit(c.Message, "Выберите категорию:", markup)
+	_, err = h.b.Edit(c.Message, "Выберите категорию:", markup)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (h *callbackHandler) handleRenameCallback(c *telebot.Callback, userSessions map[int64]*model.UserSession, id string) {
-	h.log.Infof("processing category rename request from user %d", c.Sender.ID)
-
+func (h *callbackHandler) handleRenameCallback(c *telebot.Callback, id string) error {
 	categoryId, err := parseCategoryId(id)
 	if err != nil {
-		h.b.Send(c.Sender, "Ошибка формата ID категории")
-		return
+		_, sendErr := h.b.Send(c.Sender, "Ошибка формата ID категории")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return err
 	}
 	userSessions[c.Sender.ID] = &model.UserSession{
 		State:      model.StateAwaitingRenameCategory,
 		CategoryID: int(categoryId),
 	}
-	h.b.Send(c.Sender, "Введите новое название категории:")
+	_, err = h.b.Send(c.Sender, "Введите новое название категории:")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (h *callbackHandler) handleDeleteCallback(c *telebot.Callback, id string) {
-	h.log.Infof("processing delete category request from user %d", c.Sender.ID)
-
+func (h *callbackHandler) handleDeleteCallback(c *telebot.Callback, id string) error {
 	categoryId, err := parseCategoryId(id)
 	if err != nil {
-		h.b.Send(c.Sender, "Ошибка при удалении категории.")
-		return
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при удалении категории.")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return err
 	}
 	err = h.storageInstance.DeleteCategory(c.Sender.ID, categoryId)
 	if err != nil {
-		h.b.Send(c.Sender, "Ошибка при удалении категории: "+err.Error())
-	} else {
-		h.b.Send(c.Sender, "Категория удалена.")
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при удалении категории: "+err.Error())
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
 	}
+	_, err = h.b.Send(c.Sender, "Категория удалена.")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (h *callbackHandler) handleTransactionCallback(c *telebot.Callback) {
-	h.log.Infof("processing transaction for user %d", c.Sender.ID)
-
+func (h *callbackHandler) handleTransactionCallback(c *telebot.Callback) error {
 	x := strings.ReplaceAll(c.Data, "\f", "")
 	prefixes := strings.Split(strings.TrimSpace(x), ":")
 	categoryId, err := strconv.ParseInt(prefixes[1], 10, 64)
 	if err != nil {
-		h.log.Errorf("error parsing category ID from prefixes: %s", prefixes[1])
-		h.b.Send(c.Sender, "Ошибка при обработке категории")
-		return
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при обработке категории")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return nil
 	}
 
 	amount, err := strconv.ParseFloat(prefixes[3], 10)
 	if err != nil {
-		h.log.Errorf("error parsing amount from prefixes: %s", prefixes[3])
-		h.b.Send(c.Sender, "Ошибка при обработке суммы")
-		return
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при обработке суммы")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return nil
 	}
 
 	err = h.handleTransaction(c.Sender.ID, categoryId, amount, prefixes[2])
 	if err != nil {
-		h.b.Send(c.Sender, "Ошибка при создании и сохранении транзакции")
-	} else {
-		h.b.Send(c.Sender, fmt.Sprintf("Транзакция на сумму %s в категорию %q добавлена.", prefixes[3], prefixes[2]))
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при создании и сохранении транзакции")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
 	}
+	_, err = h.b.Send(c.Sender, fmt.Sprintf(
+		"Транзакция на сумму %s в категорию %q добавлена.",
+		prefixes[3],
+		prefixes[2],
+	))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (h *callbackHandler) handleTodayCallback(c *telebot.Callback) {
-	h.log.Infof("processing today's stats for user %d", c.Sender.ID)
-
+func (h *callbackHandler) handleTodayCallback(c *telebot.Callback) error {
 	var startDate, endDate time.Time
 	now := time.Now()
 	startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	endDate = startDate.Add(24 * time.Hour)
-	h.handleStats(c.Sender, startDate, endDate)
+	err := h.handleStats(c.Sender, startDate, endDate)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *callbackHandler) handleTransaction(senderId, categoryId int64, amount float64, categoryType string) error {
-	h.log.Infof("handling transaction: SenderID=%d, CategoryID=%d, Amount=%.2f, Type=%s", senderId, categoryId, amount, categoryType)
-
 	transaction := model.Transaction{
 		UserChat:        senderId,
 		CategoryID:      categoryId,
@@ -178,24 +222,27 @@ func (h *callbackHandler) handleTransaction(senderId, categoryId int64, amount f
 	}
 
 	if err := h.storageInstance.AddTransaction(transaction); err != nil {
-		h.log.Errorf("error adding transaction: %v", err)
 		return err
 	}
 
-	h.log.Info("transaction added successfully")
 	return nil
 }
 
-func (h *callbackHandler) handleStats(sender *telebot.User, startDate, endDate time.Time) {
-	h.log.Infof("handling stats: SenderID=%d, StartDate=%s, EndDate=%s", sender.ID, startDate, endDate)
+func (h *callbackHandler) handleStats(sender *telebot.User, startDate, endDate time.Time) error {
 	incomeCategories, expenseCategories, err := h.storageInstance.GetTransactionsStatsByCategory(sender.ID, startDate, endDate)
 	if err != nil {
-		h.log.Errorf("error retrieving statistics: %v", err)
-		h.b.Send(sender, "Ошибка при получении статистики: "+err.Error())
-		return
+		_, sendErr := h.b.Send(sender, "Ошибка при получении статистики: "+err.Error())
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return err
 	}
 
 	response := getStats(incomeCategories, expenseCategories)
 
-	h.b.Send(sender, response, &telebot.SendOptions{ParseMode: telebot.ModeMarkdown})
+	_, err = h.b.Send(sender, response, &telebot.SendOptions{ParseMode: telebot.ModeMarkdown})
+	if err != nil {
+		return err
+	}
+	return nil
 }
