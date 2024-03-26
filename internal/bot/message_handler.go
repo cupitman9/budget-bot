@@ -69,6 +69,19 @@ func (h *messageHandler) handleOnText(m *telebot.Message) error {
 }
 
 func (h *messageHandler) handleStart(m *telebot.Message) error {
+	u, err := h.storageInstance.GetUserByChatID(m.Chat.ID)
+	if err != nil {
+		_, err := h.b.Send(m.Sender, "Ошибка при проверке существования пользователя:", err)
+		if err != nil {
+			return err
+		}
+	}
+
+	if !u.IsEmpty() {
+		h.log.WithField("chat_id", m.Chat.ID).Warn("found the same user")
+		return nil
+	}
+
 	user := model.User{
 		Username:  m.Sender.Username,
 		ChatID:    m.Chat.ID,
@@ -83,8 +96,19 @@ func (h *messageHandler) handleStart(m *telebot.Message) error {
 		}
 	}
 
+	defaultCategory := model.Category{
+		Name:   "Общее",
+		ChatID: m.Chat.ID,
+	}
+	if err := h.storageInstance.AddCategory(defaultCategory); err != nil {
+		_, err := h.b.Send(m.Sender, "Ошибка при добавлении общей категории:", err)
+		if err != nil {
+			return err
+		}
+	}
+
 	welcomeText := "Привет! Нажмите /help для подробной информации"
-	_, err := h.b.Send(m.Sender, welcomeText)
+	_, err = h.b.Send(m.Sender, welcomeText)
 	if err != nil {
 		return err
 	}
@@ -130,8 +154,7 @@ func (h *messageHandler) handleShowCategories(m *telebot.Message) error {
 	for _, category := range categories {
 		btnCategory := markup.Text(category.Name)
 		btnRename := markup.Data("Переименовать", "rename:"+strconv.Itoa(int(category.ID)))
-		btnDelete := markup.Data("Удалить", "delete:"+strconv.Itoa(int(category.ID)))
-		rows = append(rows, markup.Row(btnCategory), markup.Row(btnRename, btnDelete))
+		rows = append(rows, markup.Row(btnCategory), markup.Row(btnRename))
 	}
 
 	markup.Inline(rows...)
@@ -145,8 +168,8 @@ func (h *messageHandler) handleShowCategories(m *telebot.Message) error {
 
 func (h *messageHandler) handleIncomeExpenseButtons(m *telebot.Message) error {
 	markup := &telebot.ReplyMarkup{}
-	btnIncome := markup.Data("Доход", "income:"+m.Text)
-	btnExpense := markup.Data("Расход", "expense:"+m.Text)
+	btnIncome := markup.Data("Доход", strconv.Itoa(int(model.TransactionTypeIncome))+":"+m.Text)
+	btnExpense := markup.Data("Расход", strconv.Itoa(int(model.TransactionTypeExpense))+":"+m.Text)
 	markup.Inline(markup.Row(btnIncome, btnExpense))
 	_, err := h.b.Send(m.Sender, "Выберите тип транзакции:", markup)
 	if err != nil {

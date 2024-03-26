@@ -2,6 +2,17 @@ package model
 
 import "time"
 
+const (
+	StateAwaitingNewCategoryName UserState = iota + 1
+	StateAwaitingRenameCategory
+	StateAwaitingPeriod
+)
+
+const (
+	TransactionTypeIncome  uint8 = 1
+	TransactionTypeExpense uint8 = 2
+)
+
 type User struct {
 	Username  string
 	ChatID    int64
@@ -17,22 +28,14 @@ type Category struct {
 }
 
 type Transaction struct {
-	UserChat        int64
+	ChatID          int64
 	CategoryID      int64
 	Amount          float64
-	TransactionType string
+	TransactionType uint8
 	CreatedAt       time.Time
 }
 
 type UserState int
-
-const (
-	StateNone UserState = iota
-	StateAwaitingNewCategoryName
-	StateAwaitingRenameCategory
-	StateAwaitingTransactionAmount UserState = iota
-	StateAwaitingPeriod            UserState = iota
-)
 
 type UserSession struct {
 	State             UserState
@@ -40,4 +43,8 @@ type UserSession struct {
 	TransactionAmount float64
 	StartDate         time.Time
 	EndDate           time.Time
+}
+
+func (u *User) IsEmpty() bool {
+	return u.ChatID == 0 && u.CreatedAt.IsZero()
 }

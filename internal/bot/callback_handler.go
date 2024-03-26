@@ -30,6 +30,8 @@ func (h *callbackHandler) handleCallback(c *telebot.Callback) error {
 	if len(prefixes) == 0 {
 		return errors.New("no prefixes after splitting")
 	}
+	transactionTypeIncome := strconv.Itoa(int(model.TransactionTypeIncome))
+	transactionTypeExpense := strconv.Itoa(int(model.TransactionTypeExpense))
 
 	switch prefixes[0] {
 	case "rename":
@@ -37,20 +39,15 @@ func (h *callbackHandler) handleCallback(c *telebot.Callback) error {
 		if err != nil {
 			return fmt.Errorf("error handling rename callback: %w", err)
 		}
-	case "delete":
-		err := h.handleDeleteCallback(c, prefixes[1])
-		if err != nil {
-			return fmt.Errorf("error handling delete callback: %w", err)
-		}
-	case "expense":
-		err := h.handleTransactionCategories(c)
-		if err != nil {
-			return fmt.Errorf("error handling expense callback: %w", err)
-		}
-	case "income":
+	case transactionTypeIncome:
 		err := h.handleTransactionCategories(c)
 		if err != nil {
 			return fmt.Errorf("error handling income callback: %w", err)
+		}
+	case transactionTypeExpense:
+		err := h.handleTransactionCategories(c)
+		if err != nil {
+			return fmt.Errorf("error handling expense callback: %w", err)
 		}
 	case "transaction":
 		err := h.handleTransactionCallback(c)
@@ -138,29 +135,6 @@ func (h *callbackHandler) handleRenameCallback(c *telebot.Callback, id string) e
 	return nil
 }
 
-func (h *callbackHandler) handleDeleteCallback(c *telebot.Callback, id string) error {
-	categoryId, err := parseCategoryId(id)
-	if err != nil {
-		_, sendErr := h.b.Send(c.Sender, "Ошибка при удалении категории.")
-		if sendErr != nil {
-			return fmt.Errorf("%v: %w", err, sendErr)
-		}
-		return err
-	}
-	err = h.storageInstance.DeleteCategory(c.Sender.ID, categoryId)
-	if err != nil {
-		_, sendErr := h.b.Send(c.Sender, "Ошибка при удалении категории: "+err.Error())
-		if sendErr != nil {
-			return fmt.Errorf("%v: %w", err, sendErr)
-		}
-	}
-	_, err = h.b.Send(c.Sender, "Категория удалена.")
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (h *callbackHandler) handleTransactionCallback(c *telebot.Callback) error {
 	x := strings.ReplaceAll(c.Data, "\f", "")
 	prefixes := strings.Split(strings.TrimSpace(x), ":")
@@ -182,18 +156,24 @@ func (h *callbackHandler) handleTransactionCallback(c *telebot.Callback) error {
 		return nil
 	}
 
-	err = h.handleTransaction(c.Sender.ID, categoryId, amount, prefixes[2])
+	transactionType, err := strconv.ParseUint(prefixes[2], 10, 8)
+	if err != nil {
+		_, sendErr := h.b.Send(c.Sender, "Ошибка при обработке типа транзакции")
+		if sendErr != nil {
+			return fmt.Errorf("%v: %w", err, sendErr)
+		}
+		return nil
+	}
+
+	err = h.handleTransaction(c.Sender.ID, categoryId, amount, uint8(transactionType))
 	if err != nil {
 		_, sendErr := h.b.Send(c.Sender, "Ошибка при создании и сохранении транзакции")
 		if sendErr != nil {
 			return fmt.Errorf("%v: %w", err, sendErr)
 		}
 	}
-	_, err = h.b.Send(c.Sender, fmt.Sprintf(
-		"Транзакция на сумму %s в категорию %q добавлена.",
-		prefixes[3],
-		prefixes[2],
-	))
+
+	_, err = h.b.Send(c.Sender, fmt.Sprintf("Транзакция на сумму %s добавлена", prefixes[3]))
 	if err != nil {
 		return err
 	}
@@ -212,12 +192,12 @@ func (h *callbackHandler) handleTodayCallback(c *telebot.Callback) error {
 	return nil
 }
 
-func (h *callbackHandler) handleTransaction(senderId, categoryId int64, amount float64, categoryType string) error {
+func (h *callbackHandler) handleTransaction(senderId, categoryId int64, amount float64, transactionType uint8) error {
 	transaction := model.Transaction{
-		UserChat:        senderId,
+		ChatID:          senderId,
 		CategoryID:      categoryId,
 		Amount:          amount,
-		TransactionType: categoryType,
+		TransactionType: transactionType,
 		CreatedAt:       time.Now(),
 	}
 
