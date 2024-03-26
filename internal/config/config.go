@@ -1,33 +1,21 @@
 package config
 
 import (
-	"os"
-	"strconv"
+	"fmt"
+
+	"github.com/caarlos0/env/v10"
 )
 
 type Config struct {
-	BotToken   string
-	BotDebug   bool
-	DBHost     string
-	DBPort     int
-	DBUser     string
-	DBPassword string
-	DBName     string
+	BotToken    string `env:"TELEGRAM_BOT_TOKEN,required"`
+	PostgresDSN string `env:"POSTGRES_DSN,required"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
 }
 
 func LoadConfig() (*Config, error) {
-	port, err := strconv.Atoi(os.Getenv("DB_PORT"))
-	if err != nil {
-		return nil, err
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("error parsing config: %w", err)
 	}
-
-	return &Config{
-		BotToken:   os.Getenv("TELEGRAM_BOT_TOKEN"),
-		BotDebug:   os.Getenv("BOT_DEBUG") == "true",
-		DBHost:     os.Getenv("DB_HOST"),
-		DBPort:     port,
-		DBUser:     os.Getenv("DB_USER"),
-		DBPassword: os.Getenv("DB_PASSWORD"),
-		DBName:     os.Getenv("DB_NAME"),
-	}, nil
+	return cfg, nil
 }

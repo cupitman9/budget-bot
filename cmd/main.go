@@ -1,33 +1,32 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"log"
 	"time"
 
-	"gopkg.in/tucnak/telebot.v2"
+	"gopkg.in/telebot.v3"
 
-	"telegram-budget-bot/internal/bot"
-	"telegram-budget-bot/internal/config"
-	"telegram-budget-bot/internal/logger"
-	"telegram-budget-bot/internal/model"
-	"telegram-budget-bot/internal/storage"
+	"github.com/cupitman9/budget-bot/internal/bot"
+	"github.com/cupitman9/budget-bot/internal/config"
+	"github.com/cupitman9/budget-bot/internal/logger"
+	"github.com/cupitman9/budget-bot/internal/storage"
 )
 
-var userSessions = make(map[int64]*model.UserSession)
-
 func main() {
-	log := logger.New()
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Ошибка при загрузке конфигурации: %v", err)
+		log.Fatalf("error loading configuration: %v", err)
 	}
 
-	dbInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
-	storageInstance, err := storage.NewStorage(dbInfo)
+	appLogger := logger.New(cfg.LogLevel)
+
+	ctx := context.Background()
+	appStorage, err := storage.NewStorage(ctx, cfg.PostgresDSN)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
+		appLogger.WithError(err).Fatal("error creating new storage")
 	}
+	defer appStorage.Close()
 
 	botSettings := telebot.Settings{
 		Token:  cfg.BotToken,
@@ -35,10 +34,11 @@ func main() {
 	}
 	botAPI, err := telebot.NewBot(botSettings)
 	if err != nil {
-		log.Fatalf("Error creating bot instance: %v", err)
+		appLogger.WithError(err).Error("error creating bot instance")
+		return
 	}
 
-	bot.RegisterHandlers(botAPI, storageInstance, log, userSessions)
-	log.Info("Bot start")
+	bot.RegisterHandlers(botAPI, appStorage, appLogger)
+	appLogger.Info("bot starting")
 	botAPI.Start()
 }
